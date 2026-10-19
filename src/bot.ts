@@ -381,6 +381,7 @@ bot.on("message:text", async (ctx) => {
         tagId,
         deepLink,
         botUsername: config.botUsername,
+        locale,
       });
 
       await ctx.replyWithPhoto(new InputFile(assets.png, `PolyTag-${tagId}.png`), {

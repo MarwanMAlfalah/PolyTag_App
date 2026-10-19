@@ -1,6 +1,59 @@
 export const supportedLocales = ["ru", "en", "ar", "zh", "vi", "es", "fr"] as const;
 export type Locale = (typeof supportedLocales)[number];
 
+type StickerMessages = {
+  found: string;
+  safe: string;
+  // Explicit breaks keep the anonymous-contact explanation to two short lines.
+  scan: string;
+  noSecrets: string;
+};
+
+export const stickerMessages: Record<Locale, StickerMessages> = {
+  ru: {
+    found: "НАШЛИ ЭТУ ВЕЩЬ?",
+    safe: "БЕЗОПАСНЫЙ QR",
+    scan: "Сканируйте, чтобы анонимно\nсвязаться с владельцем.",
+    noSecrets: "Без пароля • кода входа • оплаты",
+  },
+  en: {
+    found: "FOUND THIS ITEM?",
+    safe: "SAFE QR",
+    scan: "Scan to contact the owner\nanonymously.",
+    noSecrets: "No password • login code • payment",
+  },
+  ar: {
+    found: "وجدت هذا الغرض؟",
+    safe: "QR آمن",
+    scan: "امسح للتواصل مع المالك\nدون كشف هويتك.",
+    noSecrets: "لا كلمة مرور • لا رمز دخول • لا دفع",
+  },
+  zh: {
+    found: "捡到这个物品？",
+    safe: "安全二维码",
+    scan: "扫码即可匿名联系物主。",
+    noSecrets: "无需密码 • 登录验证码 • 付款",
+  },
+  vi: {
+    found: "NHẶT ĐƯỢC ĐỒ NÀY?",
+    safe: "QR AN TOÀN",
+    scan: "Quét để liên hệ ẩn danh\nvới chủ sở hữu.",
+    noSecrets: "Không mật khẩu • mã đăng nhập • thanh toán",
+  },
+  es: {
+    found: "¿ENCONTRASTE ESTE OBJETO?",
+    safe: "QR SEGURO",
+    scan: "Escanea para contactar al\npropietario de forma anónima.",
+    noSecrets: "Sin contraseña • código • pago",
+  },
+  fr: {
+    found: "OBJET TROUVÉ ?",
+    safe: "QR SÉCURISÉ",
+    scan: "Scannez pour contacter le\npropriétaire anonymement.",
+    noSecrets: "Sans mot de passe • code • paiement",
+  },
+};
+
 export const languageOptions: Array<{ id: Locale; label: string }> = [
   { id: "ru", label: "🇷🇺 Русский" },
   { id: "en", label: "🇬🇧 English" },
