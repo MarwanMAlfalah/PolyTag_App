@@ -1,0 +1,29 @@
+{
+  "name": "polytag-bot",
+  "version": "0.6.1",
+  "private": true,
+  "description": "PolyTag Telegram bot beta with Supabase persistence and Vercel webhook deployment",
+  "scripts": {
+    "dev": "tsx watch src/local.ts",
+    "start": "tsx src/local.ts",
+    "typecheck": "tsc --noEmit",
+    "webhook:set": "tsx scripts/setWebhook.ts",
+    "webhook:info": "tsx scripts/webhookInfo.ts",
+    "webhook:delete": "tsx scripts/deleteWebhook.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/qrcode": "^1.5.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "type": "module"
+}
