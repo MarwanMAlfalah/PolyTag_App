@@ -340,10 +340,12 @@ bot.callbackQuery(/^safe:(PT-[A-Z0-9]{8}|TEST[0-9A-Z_-]+)$/i, async (ctx) => {
   await showSafety(ctx, locale, normalizeTagId(ctx.match[1]));
 });
 
-bot.on("message:text", async (ctx) => {
+bot.on("message:text", async (ctx, next) => {
   if (!ctx.from || !ctx.chat) return;
-  if (ctx.message.text.startsWith("/")) return;
 
+  if (ctx.message.text.startsWith("/")) {
+    return next();
+  }
   const state = (await repository.getBotState(ctx.from.id)) as UserState | null;
   if (!state) return;
   const locale = await localeForContext(ctx);
