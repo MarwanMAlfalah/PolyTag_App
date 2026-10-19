@@ -112,6 +112,10 @@ ACTIVE → LOST → FOUND → RECOVERED
 
 Owners can mark an item as lost, record where they last saw it, receive finder reports, and confirm when the item has been recovered.
 
+After entering the last-seen location, owners review a confirmation with **Confirm**, **Change location**, and **Cancel**. Only Confirm activates Lost Mode and creates the report. Drafts remain in Supabase `bot_states`; editing or cancelling does not change the item or create a report.
+
+Personal commands and callbacks work only in private chats. `/chatid` remains available in groups. An optional admin group receives item/report details after a successful lost report; owner profile and contact fields are omitted. Admin delivery failures are logged without changing the saved report.
+
 ### 🌍 Multilingual experience
 
 The default interface language is **Russian**, with persistent language preferences for:
@@ -277,6 +281,9 @@ Then fill in:
 BOT_TOKEN=YOUR_BOTFATHER_TOKEN
 BOT_USERNAME=PolyTagBot
 
+# Optional admin group; leave unset to disable notifications.
+POLYTAG_ADMIN_CHAT_ID=-1001234567890
+
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_YOUR_SERVER_KEY
 
@@ -346,6 +353,10 @@ SUPABASE_URL
 SUPABASE_SECRET_KEY
 WEBHOOK_SECRET_TOKEN
 ```
+
+Optionally add `POLYTAG_ADMIN_CHAT_ID` with your private admin group's numeric ID, obtained by running `/chatid` there. Add the bot to that group and allow it to send messages. Set this variable for the intended Vercel environment before the next deployment; omit it to disable admin notifications. No webhook or database changes are needed.
+
+Run `npm run typecheck`, `npm run test:lost`, and `npm run test:stickers` before deployment. The lost-flow tests mock Telegram and Supabase, forbid network requests, and use dummy configuration without loading your real `.env`.
 
 ### 3. Deploy
 

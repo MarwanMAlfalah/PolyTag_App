@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile } from "grammy";
+import { Bot, GrammyError, InlineKeyboard, InputFile } from "grammy";
 import { config } from "./config.js";
 import {
   categoryKeyboard,
@@ -6,8 +6,9 @@ import {
   homeKeyboard,
   itemCategories,
   languageKeyboard,
+  lostConfirmationKeyboard,
 } from "./bot/keyboards.js";
-import type { UserState } from "./bot/state.js";
+import type { LostConfirmationState, UserState } from "./bot/state.js";
 import {
   categoryLabel,
   itemStatusLabel,
@@ -18,15 +19,38 @@ import {
 import { PolyTagRepository } from "./repositories/polytagRepository.js";
 import { generateUniqueTagToken } from "./services/tagToken.js";
 import { buildStickerAssets } from "./services/stickerService.js";
+import { adminLostReportMessage } from "./services/lostReportNotification.js";
 
 const bot = new Bot(config.botToken);
 const repository = new PolyTagRepository();
+
+// This diagnostic works in groups without touching a user's stored private chat.
+bot.command("chatid", async (ctx) => {
+  if (ctx.chat) await ctx.reply(`Chat ID: ${ctx.chat.id}`);
+});
+
+bot.use(async (ctx, next) => {
+  if (ctx.chat?.type === "private") return next();
+  // Reserved for future admin handlers, which must perform their own authorization.
+  if (config.adminChatId !== null && ctx.chat?.id === config.adminChatId &&
+      ctx.callbackQuery?.data?.startsWith("admin:")) return next();
+
+  const message = t(normalizeLocale(ctx.from?.language_code), "privateChatOnly", {
+    botUsername: config.botUsername,
+  });
+  if (ctx.callbackQuery) {
+    await ctx.answerCallbackQuery({ text: message });
+  } else if (ctx.message?.text?.startsWith("/")) {
+    await ctx.reply(message);
+  }
+});
 
 function normalizeTagId(value: string) {
   return value.trim().replace(/^t_/i, "").toUpperCase();
 }
 
 async function ensureUser(ctx: any): Promise<string> {
+  if (ctx.chat?.type !== "private") throw new Error("PolyTag user actions require a private chat");
   return repository.upsertUser({
     telegramUserId: ctx.from.id,
     telegramChatId: ctx.chat.id,
@@ -64,6 +88,21 @@ async function showSafety(ctx: any, locale: Locale, tagId?: string) {
     })}`,
     { reply_markup: keyboard },
   );
+}
+
+function lostReportParams(state: LostConfirmationState, locale: Locale) {
+  return {
+    itemName: state.itemName,
+    category: categoryLabel(locale, state.category),
+    lastSeen: state.lastSeenText,
+    tagId: state.tagId ?? t(locale, "noActiveTag"),
+  };
+}
+
+async function showLostConfirmation(ctx: any, state: LostConfirmationState, locale: Locale) {
+  await ctx.reply(t(locale, "confirmLostReport", lostReportParams(state, locale)), {
+    reply_markup: lostConfirmationKeyboard(locale, state.itemId),
+  });
 }
 
 async function showFoundTag(ctx: any, tagId: string, forcedLocale?: Locale) {
@@ -212,9 +251,97 @@ bot.callbackQuery(/^lost:(.+)$/, async (ctx) => {
     type: "awaiting_lost_location",
     itemId: item.itemId,
     itemName: item.itemName,
+    category: item.category,
+    tagId: item.tagId,
   });
 
   await ctx.reply(t(locale, "askLastSeen", { itemName: item.itemName }));
+});
+
+bot.callbackQuery(/^lost_(confirm|edit|cancel):([a-f0-9-]{36})$/, async (ctx) => {
+  if (!ctx.from || !ctx.chat) return;
+  await ctx.answerCallbackQuery();
+  const locale = await localeForContext(ctx);
+  const [action, itemId] = [ctx.match[1], ctx.match[2]];
+  const state = (await repository.getBotState(ctx.from.id)) as UserState | null;
+  if (state?.type !== "awaiting_lost_confirmation" || state.itemId !== itemId) {
+    await ctx.reply(t(locale, "lostReportExpired"), { reply_markup: homeKeyboard(locale) });
+    return;
+  }
+
+  if (action === "cancel") {
+    await repository.clearBotState(ctx.from.id);
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply(t(locale, "lostReportCancelled"), { reply_markup: homeKeyboard(locale) });
+    return;
+  }
+
+  if (action === "edit") {
+    await repository.setBotState(ctx.from.id, {
+      type: "awaiting_lost_location",
+      itemId: state.itemId,
+      itemName: state.itemName,
+      category: state.category,
+      tagId: state.tagId,
+    });
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+    await ctx.reply(t(locale, "askLastSeen", { itemName: state.itemName }));
+    return;
+  }
+
+  let reportId: string;
+  let confirmed: LostConfirmationState;
+  try {
+    const ownerId = await ensureUser(ctx);
+    const items = await repository.listOwnedItems(ownerId);
+    const item = items.find((candidate) => candidate.itemId === state.itemId);
+    if (!item) {
+      await ctx.reply(t(locale, "itemNotFound"), { reply_markup: homeKeyboard(locale) });
+      return;
+    }
+    // Refresh item/tag details, rather than trusting an old keyboard or state snapshot.
+    confirmed = { ...state, itemName: item.itemName, category: item.category, tagId: item.tagId };
+    ({ reportId } = await repository.reportItemLost({
+      ownerId, itemId: state.itemId, lastSeenText: state.lastSeenText,
+    }));
+  } catch (error) {
+    console.error("PolyTag lost report save failed:", error);
+    await ctx.reply(t(locale, "lostReportSaveFailed"), {
+      reply_markup: lostConfirmationKeyboard(locale, state.itemId),
+    });
+    return;
+  }
+
+  // Everything below is secondary to the successful report write. Never offer to
+  // resubmit a report merely because cleanup or a Telegram notification failed.
+  try {
+    await repository.clearBotState(ctx.from.id);
+  } catch (error) {
+    console.error("PolyTag saved lost report state cleanup failed:", {
+      reportId, error: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+  await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
+  try {
+    await ctx.reply(t(locale, "lostModeActivated", lostReportParams(confirmed, locale)), {
+      reply_markup: homeKeyboard(locale),
+    });
+  } finally {
+    if (config.adminChatId !== null) {
+      try {
+        await bot.api.sendMessage(config.adminChatId, adminLostReportMessage({ ...confirmed, locale }), {
+          link_preview_options: { is_disabled: true },
+        });
+      } catch (error) {
+        // Avoid logging grammY's request payload, which contains Telegram chat IDs.
+        console.error("PolyTag admin lost-report notification failed:", {
+          reportId,
+          error: error instanceof Error ? error.name : "UnknownError",
+          code: error instanceof GrammyError ? error.error_code : undefined,
+        });
+      }
+    }
+  }
 });
 
 bot.callbackQuery(/^recovered:(.+)$/, async (ctx) => {
@@ -423,16 +550,28 @@ bot.on("message:text", async (ctx, next) => {
     }
 
     const ownerId = await ensureUser(ctx);
-    await repository.reportItemLost({ ownerId, itemId: state.itemId, lastSeenText });
+    const items = await repository.listOwnedItems(ownerId);
+    const item = items.find((candidate) => candidate.itemId === state.itemId);
+    if (!item) {
+      await ctx.reply(t(locale, "itemNotFound"), { reply_markup: homeKeyboard(locale) });
+      return;
+    }
+    // Also refreshes pre-v0.7 persisted states that lack category/tag metadata.
+    const confirmation: LostConfirmationState = {
+      type: "awaiting_lost_confirmation",
+      itemId: item.itemId,
+      itemName: item.itemName,
+      category: item.category,
+      tagId: item.tagId,
+      lastSeenText,
+    };
+    await repository.setBotState(ctx.from.id, confirmation);
+    await showLostConfirmation(ctx, confirmation, locale);
+    return;
+  }
 
-    await repository.clearBotState(ctx.from.id);
-    await ctx.reply(
-      t(locale, "lostModeActivated", {
-        itemName: state.itemName,
-        lastSeen: lastSeenText,
-      }),
-      { reply_markup: homeKeyboard(locale) },
-    );
+  if (state.type === "awaiting_lost_confirmation") {
+    await showLostConfirmation(ctx, state, locale);
     return;
   }
 
@@ -498,12 +637,6 @@ bot.command("status", async (ctx) => {
   await repository.healthCheck();
   const locale = ctx.from ? await localeForContext(ctx) : "ru";
   await ctx.reply(t(locale, "statusOk"));
-});
-
-bot.command("chatid", async (ctx) => {
-  if (!ctx.chat) return;
-
-  await ctx.reply(`Chat ID: ${ctx.chat.id}`);
 });
 
 bot.catch((err) => {

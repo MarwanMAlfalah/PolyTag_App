@@ -32,6 +32,15 @@ export function categoryKeyboard(locale: Locale) {
   return keyboard;
 }
 
+export function lostConfirmationKeyboard(locale: Locale, itemId: string) {
+  return new InlineKeyboard()
+    .text(t(locale, "confirmLostButton"), `lost_confirm:${itemId}`)
+    .row()
+    .text(t(locale, "editLostLocation"), `lost_edit:${itemId}`)
+    .row()
+    .text(t(locale, "cancelLostReport"), `lost_cancel:${itemId}`);
+}
+
 export function languageKeyboard(returnTo: "home" | "found", tagId?: string) {
   const keyboard = new InlineKeyboard();
   languageOptions.forEach((language, index) => {

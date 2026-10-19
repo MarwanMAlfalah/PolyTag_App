@@ -232,7 +232,7 @@ export class PolyTagRepository {
     ownerId: string;
     itemId: string;
     lastSeenText: string;
-  }): Promise<void> {
+  }): Promise<{ reportId: string }> {
     const { data: item, error: itemError } = await supabase
       .from("items")
       .select("id, owner_id, status")
@@ -251,11 +251,13 @@ export class PolyTagRepository {
 
     if (updateError) throw new Error(`Could not mark item lost: ${updateError.message}`);
 
-    await supabase
+    const { error: closeError } = await supabase
       .from("lost_reports")
       .update({ status: "CLOSED", resolved_at: new Date().toISOString() })
       .eq("item_id", input.itemId)
       .eq("status", "OPEN");
+
+    if (closeError) throw new Error(`Could not close previous lost reports: ${closeError.message}`);
 
     const { data: report, error: reportError } = await supabase
       .from("lost_reports")
@@ -268,7 +270,9 @@ export class PolyTagRepository {
       .select("id")
       .single();
 
-    if (reportError) throw new Error(`Could not create lost report: ${reportError.message}`);
+    if (reportError || !report) {
+      throw new Error(`Could not create lost report: ${reportError?.message ?? "missing report"}`);
+    }
 
     await this.logEvent("ITEM_REPORTED_LOST", {
       actorUserId: input.ownerId,
@@ -278,6 +282,7 @@ export class PolyTagRepository {
         last_seen_text: input.lastSeenText,
       },
     });
+    return { reportId: report.id as string };
   }
 
   async markItemRecovered(input: {

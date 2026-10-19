@@ -8,6 +8,7 @@
     "start": "tsx src/local.ts",
     "typecheck": "tsc --noEmit",
     "test:stickers": "tsx scripts/testStickerGeneration.ts",
+    "test:lost": "tsx scripts/testLostFlow.ts",
     "webhook:set": "tsx scripts/setWebhook.ts",
     "webhook:info": "tsx scripts/webhookInfo.ts",
     "webhook:delete": "tsx scripts/deleteWebhook.ts"
