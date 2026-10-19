@@ -1,6 +1,40 @@
 import QRCode from "qrcode";
-import sharp from "sharp";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import QRCode from "qrcode";
 import { PDFDocument } from "pdf-lib";
+import type { Locale } from "../i18n/index.js";
+import { PDFDocument } from "pdf-lib";
+
+function configureFonts() {
+  const fontDir = path.join(process.cwd(), "assets", "fonts");
+
+  const configDir = path.join(os.tmpdir(), "polytag-fontconfig");
+  const cacheDir = path.join(os.tmpdir(), "polytag-font-cache");
+
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(cacheDir, { recursive: true });
+
+  const configFile = path.join(configDir, "fonts.conf");
+
+  fs.writeFileSync(
+    configFile,
+    `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${fontDir}</dir>
+  <cachedir>${cacheDir}</cachedir>
+  <config></config>
+</fontconfig>`,
+    "utf8",
+  );
+
+  process.env.FONTCONFIG_PATH = configDir;
+  process.env.FONTCONFIG_FILE = configFile;
+  process.env.PANGOCAIRO_BACKEND = "fontconfig";
+}
 
 export type StickerAssets = {
   png: Buffer;
