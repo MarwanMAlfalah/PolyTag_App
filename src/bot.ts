@@ -498,6 +498,12 @@ bot.command("status", async (ctx) => {
   await ctx.reply(t(locale, "statusOk"));
 });
 
+bot.command("chatid", async (ctx) => {
+  if (!ctx.chat) return;
+
+  await ctx.reply(`Chat ID: ${ctx.chat.id}`);
+});
+
 bot.catch((err) => {
   console.error("PolyTag bot error:", err.error);
 });
